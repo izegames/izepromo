@@ -1,8 +1,12 @@
-import Database from 'better-sqlite3';
+import './check-node.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_DIR } from './paths.js';
+
+// Import dinâmico de propósito: só carrega o SQLite do Node depois que check-node.js
+// conferiu a versão (e escondeu o aviso "experimental"). Num import estático ele carregaria antes.
+const { DatabaseSync } = await import('node:sqlite');
 
 export const DEFAULT_CONFIG = {
   amazonTag: '',
@@ -65,11 +69,30 @@ export function open(file) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     file = path.join(DATA_DIR, 'izepromo.db');
   }
-  db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db = new DatabaseSync(file);
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  txDepth = 0;
   return db;
+}
+
+// Transação simples (aceita chamadas aninhadas: só a mais externa abre e fecha).
+let txDepth = 0;
+function tx(fn) {
+  if (txDepth > 0) return fn();
+  conn().exec('BEGIN');
+  txDepth++;
+  try {
+    const result = fn();
+    conn().exec('COMMIT');
+    return result;
+  } catch (e) {
+    conn().exec('ROLLBACK');
+    throw e;
+  } finally {
+    txDepth--;
+  }
 }
 
 export function close() {
@@ -97,10 +120,9 @@ export function setConfig(patch) {
   const stmt = conn().prepare(
     'INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
   );
-  const run = conn().transaction((entries) => {
-    for (const [k, v] of entries) if (k in DEFAULT_CONFIG) stmt.run(k, JSON.stringify(v));
+  tx(() => {
+    for (const [k, v] of Object.entries(patch)) if (k in DEFAULT_CONFIG) stmt.run(k, JSON.stringify(v));
   });
-  run(Object.entries(patch));
   return getConfig();
 }
 
@@ -282,7 +304,7 @@ export function migrateLegacy(dir = DATA_DIR) {
   }
 
   const c = old.config || {};
-  const run = conn().transaction(() => {
+  tx(() => {
     setConfig({
       amazonTag: c.amazonTag ?? '',
       minMinutes: c.minMinutes ?? DEFAULT_CONFIG.minMinutes,
@@ -304,7 +326,6 @@ export function migrateLegacy(dir = DATA_DIR) {
       insert.run(crypto.randomUUID(), s.key, s.title, '', null, null, '', '', '', 'sent', s.at, s.at);
     }
   });
-  run();
 
   fs.renameSync(file, `${file}.migrado`);
   console.log('📦 Dados do db.json antigo importados para o SQLite (arquivo renomeado para db.json.migrado)');

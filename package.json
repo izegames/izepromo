@@ -8,11 +8,10 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",
-    "better-sqlite3": "^12.11.1",
     "express": "^4.19.2",
     "pino": "^9.0.0",
     "qrcode-terminal": "^0.12.0"

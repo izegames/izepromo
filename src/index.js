@@ -1,3 +1,4 @@
+import './check-node.js';
 import { open, close, migrateLegacy, getConfig } from './db.js';
 import { createWhatsApp } from './channels/whatsapp.js';
 import { createTelegram } from './channels/telegram.js';
