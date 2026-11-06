@@ -11,9 +11,10 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
-  header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  header { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); }
   h1 { font-size:18px; margin:0; }
   h2 { font-size:15px; margin:0 0 12px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
   .status { font-size:13px; padding:4px 10px; border-radius:20px; background:var(--line); }
   .status.on { background:var(--accent); color:#fff; }
   main { max-width:1100px; margin:20px auto; padding:0 16px; display:grid; gap:16px; grid-template-columns: 1fr 1fr; }
@@ -23,22 +24,34 @@
   label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
   input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  button { padding:9px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  .inline { display:flex; gap:8px; }
+  button { padding:9px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; white-space:nowrap; }
   button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
   button.danger { background:transparent; color:var(--danger); border:1px solid var(--line); padding:4px 10px; font-size:13px; }
-  .actions { display:flex; gap:8px; margin-top:14px; }
+  button.small { padding:4px 10px; font-size:13px; }
+  .actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
   pre { white-space:pre-wrap; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; font:13px/1.4 ui-monospace, monospace; margin:8px 0; }
   .item { border-top:1px solid var(--line); padding:10px 0; }
   .item:first-child { border-top:0; }
   .item-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .item-actions { display:flex; gap:6px; }
   .muted { color:var(--muted); font-size:13px; }
   .err { color:var(--danger); font-size:13px; margin-top:8px; min-height:18px; }
+  .ok { color:var(--accent); font-size:13px; margin-top:8px; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--line); margin-right:6px; text-transform:uppercase; letter-spacing:.03em; }
+  .dest { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-top:1px solid var(--line); }
+  .dest:first-child { border-top:0; }
+  .dest.off { opacity:.55; }
+  hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
 </style>
 </head>
 <body>
 <header>
   <h1>📣 Painel de Promoções</h1>
-  <span id="status" class="status">Conectando…</span>
+  <div class="chips">
+    <span id="stWa" class="status">WhatsApp…</span>
+    <span id="stTg" class="status">Telegram…</span>
+  </div>
 </header>
 
 <main>
@@ -49,7 +62,7 @@
     <label>Título do produto</label>
     <input id="title">
     <div class="row">
-      <div><label>Preço atual (R$)</label><input id="price" inputmode="decimal"></div>
+      <div><label>Preço atual (R$)</label><input id="price" inputmode="decimal" placeholder="1.299,90"></div>
       <div><label>Preço antigo (R$)</label><input id="oldPrice" inputmode="decimal"></div>
     </div>
     <div class="row">
@@ -58,6 +71,8 @@
     </div>
     <label>URL da imagem (opcional)</label>
     <input id="imageUrl" placeholder="https://…jpg">
+    <label>Agendar para (opcional; vazio = entra na fila e sai no próximo intervalo)</label>
+    <input id="scheduledAt" type="datetime-local">
     <div class="actions">
       <button id="add">Adicionar à fila</button>
       <button id="addForce" class="ghost" title="Ignora a checagem de repetição">Adicionar mesmo se repetido</button>
@@ -66,12 +81,25 @@
   </section>
 
   <section class="card">
-    <h2>Configurações</h2>
-    <label>Grupo do WhatsApp</label>
-    <div style="display:flex; gap:8px">
+    <h2>Destinos</h2>
+    <div id="dests"><p class="muted">Nenhum destino ainda.</p></div>
+    <hr>
+    <label>Adicionar grupo do WhatsApp</label>
+    <div class="inline">
       <select id="group"><option value="">— carregue os grupos —</option></select>
       <button id="loadGroups" class="ghost" type="button">Carregar</button>
+      <button id="addGroup" type="button">Adicionar</button>
     </div>
+    <label>Adicionar chat do Telegram (@canal ou id numérico)</label>
+    <div class="inline">
+      <input id="tgChat" placeholder="@meucanal">
+      <button id="addTg" type="button">Adicionar</button>
+    </div>
+    <div id="destMsg" class="err"></div>
+  </section>
+
+  <section class="card">
+    <h2>Configurações</h2>
     <label>Tag de associado da Amazon</label>
     <input id="amazonTag" placeholder="seuid-20">
     <div class="row">
@@ -80,11 +108,20 @@
     </div>
     <label>Não repetir produto por (horas)</label>
     <input id="dedupeHours" type="number" min="0">
+    <label>Token do bot do Telegram (crie com o @BotFather; adicione o bot como administrador do canal)</label>
+    <input id="telegramToken" type="password" autocomplete="off" placeholder="deixe vazio para manter o atual">
     <div class="actions">
       <button id="saveCfg">Salvar</button>
+      <button id="testTg" class="ghost" type="button">Testar Telegram</button>
       <button id="pause" class="ghost"></button>
     </div>
+    <div id="cfgMsg" class="muted"></div>
     <p id="next" class="muted"></p>
+  </section>
+
+  <section class="card">
+    <h2>Falhas (<span id="fcount">0</span>)</h2>
+    <div id="failed"><p class="muted">Nenhuma falha.</p></div>
   </section>
 
   <section class="card full">
@@ -100,18 +137,25 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const api = (url, opts) => fetch(url, opts).then(async (r) => ({ ok: r.ok, data: await r.json() }));
-const post = (url, body, method = 'POST') =>
-  api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const api = (url, opts) => fetch(url, opts).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }));
+const send = (url, body, method = 'POST') =>
+  api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const when = (ms) => new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+const CHANNEL = { whatsapp: 'WhatsApp', telegram: 'Telegram' };
 
 let cfgFilled = false;
 let paused = false;
 
 async function refresh() {
-  const { data: s } = await api('/api/state');
-  $('status').textContent = s.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado (veja o QR no terminal)';
-  $('status').className = 'status' + (s.connected ? ' on' : '');
+  const { ok, data: s } = await api('/api/state');
+  if (!ok) return;
+
+  $('stWa').textContent = s.whatsappConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado (veja o QR no terminal)';
+  $('stWa').className = 'status' + (s.whatsappConnected ? ' on' : '');
+  $('stTg').textContent = s.telegramConfigured ? 'Telegram configurado' : 'Telegram sem token';
+  $('stTg').className = 'status' + (s.telegramConfigured ? ' on' : '');
+
   paused = s.config.paused;
   $('pause').textContent = paused ? '▶ Retomar envios' : '⏸ Pausar envios';
 
@@ -120,11 +164,19 @@ async function refresh() {
     $('minMinutes').value = s.config.minMinutes;
     $('maxMinutes').value = s.config.maxMinutes;
     $('dedupeHours').value = s.config.dedupeHours;
-    if (s.config.groupId) {
-      $('group').innerHTML = `<option value="${esc(s.config.groupId)}">${esc(s.config.groupId)}</option>`;
-    }
     cfgFilled = true;
   }
+
+  $('dests').innerHTML = s.destinations.length
+    ? s.destinations.map((d) => `
+      <div class="dest ${d.enabled ? '' : 'off'}">
+        <span><span class="tag">${esc(CHANNEL[d.channel])}</span>${esc(d.name || d.target)}</span>
+        <span class="item-actions">
+          <button class="ghost small" data-act="toggle" data-id="${d.id}" data-enabled="${d.enabled ? 1 : 0}">${d.enabled ? 'Desativar' : 'Ativar'}</button>
+          <button class="danger" data-act="rmdest" data-id="${d.id}">Remover</button>
+        </span>
+      </div>`).join('')
+    : '<p class="muted">Nenhum destino ainda. Adicione um grupo ou chat abaixo; sem destino nada é enviado.</p>';
 
   $('qcount').textContent = s.queue.length;
   $('queue').innerHTML = s.queue.length
@@ -132,56 +184,108 @@ async function refresh() {
       <div class="item">
         <div class="item-head">
           <strong>${i + 1}. ${esc(q.title)}</strong>
-          <button class="danger" onclick="removeItem('${q.id}')">Remover</button>
+          <button class="danger" data-act="rmoffer" data-id="${esc(q.id)}">Remover</button>
         </div>
+        ${q.scheduledAt ? `<div class="muted">🕒 Agendada para ${esc(when(q.scheduledAt))}</div>` : ''}
+        ${q.lastError ? `<div class="muted">Última falha: ${esc(q.lastError)} (tentativa ${q.attempts})</div>` : ''}
         <pre>${esc(q.preview)}</pre>
       </div>`).join('')
     : '<p class="muted">Fila vazia.</p>';
 
+  $('fcount').textContent = s.failed.length;
+  $('failed').innerHTML = s.failed.length
+    ? s.failed.map((q) => `
+      <div class="item">
+        <div class="item-head">
+          <strong>${esc(q.title)}</strong>
+          <span class="item-actions">
+            <button class="ghost small" data-act="retry" data-id="${esc(q.id)}">Tentar de novo</button>
+            <button class="danger" data-act="rmoffer" data-id="${esc(q.id)}">Remover</button>
+          </span>
+        </div>
+        <div class="muted">${esc(q.lastError)}</div>
+      </div>`).join('')
+    : '<p class="muted">Nenhuma falha.</p>';
+
   $('sent').innerHTML = s.sent.length
-    ? s.sent.map((x) => `${new Date(x.at).toLocaleString('pt-BR')} — ${esc(x.title)}`).join('<br>')
+    ? s.sent.map((x) => `${esc(when(x.sentAt))} — ${esc(x.title)}${x.lastError ? ' (parcial)' : ''}`).join('<br>')
     : 'Nada enviado ainda.';
 
   const wait = s.nextSendAt - Date.now();
-  $('next').textContent = s.queue.length && wait > 0
-    ? `Próximo envio em ~${Math.ceil(wait / 60000)} min.` : '';
+  $('next').textContent = s.queue.length && wait > 0 ? `Próximo envio em ~${Math.ceil(wait / 60000)} min.` : '';
 }
 
 async function add(force) {
   $('err').textContent = '';
+  const local = $('scheduledAt').value; // datetime-local = horário do seu computador
   const body = {
     url: $('url').value, title: $('title').value, price: $('price').value, oldPrice: $('oldPrice').value,
     coupon: $('coupon').value, note: $('note').value, imageUrl: $('imageUrl').value, force,
+    scheduledAt: local ? new Date(local).getTime() : null,
   };
-  const { ok, data } = await post('/api/queue', body);
-  if (!ok) { $('err').textContent = data.error; return; }
-  ['url', 'title', 'price', 'oldPrice', 'coupon', 'note', 'imageUrl'].forEach((id) => ($(id).value = ''));
+  const { ok, data } = await send('/api/queue', body);
+  if (!ok) { $('err').textContent = data.error || 'Erro ao adicionar.'; return; }
+  ['url', 'title', 'price', 'oldPrice', 'coupon', 'note', 'imageUrl', 'scheduledAt'].forEach((id) => ($(id).value = ''));
   refresh();
 }
 
-async function removeItem(id) {
-  await post('/api/queue/' + id, {}, 'DELETE');
+async function addDest(body) {
+  $('destMsg').textContent = '';
+  const { ok, data } = await send('/api/destinations', body);
+  if (!ok) { $('destMsg').textContent = data.error || 'Erro ao adicionar.'; return; }
   refresh();
 }
+
+// Cliques nos botões gerados dinamicamente
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const { act, id } = b.dataset;
+  if (act === 'rmoffer') await send('/api/queue/' + encodeURIComponent(id), {}, 'DELETE');
+  if (act === 'retry') await send('/api/queue/' + encodeURIComponent(id) + '/retry');
+  if (act === 'rmdest') await send('/api/destinations/' + id, {}, 'DELETE');
+  if (act === 'toggle') await send('/api/destinations/' + id, { enabled: b.dataset.enabled !== '1' }, 'PATCH');
+  refresh();
+});
 
 $('add').onclick = () => add(false);
 $('addForce').onclick = () => add(true);
+
 $('loadGroups').onclick = async () => {
   const { data } = await api('/api/groups');
-  const cur = $('group').value;
   $('group').innerHTML = data.length
     ? data.map((g) => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('')
     : '<option value="">Nenhum grupo (WhatsApp conectado?)</option>';
-  if (cur) $('group').value = cur;
 };
+$('addGroup').onclick = () => {
+  const sel = $('group');
+  if (!sel.value) { $('destMsg').textContent = 'Carregue os grupos e escolha um.'; return; }
+  addDest({ channel: 'whatsapp', target: sel.value, name: sel.selectedOptions[0].textContent });
+};
+$('addTg').onclick = () => {
+  const chat = $('tgChat').value.trim();
+  addDest({ channel: 'telegram', target: chat, name: chat });
+  $('tgChat').value = '';
+};
+
 $('saveCfg').onclick = async () => {
-  await post('/api/config', {
-    groupId: $('group').value, amazonTag: $('amazonTag').value, minMinutes: $('minMinutes').value,
+  const body = {
+    amazonTag: $('amazonTag').value, minMinutes: $('minMinutes').value,
     maxMinutes: $('maxMinutes').value, dedupeHours: $('dedupeHours').value,
-  });
+    telegramToken: $('telegramToken').value,
+  };
+  const { ok } = await send('/api/config', body);
+  $('telegramToken').value = '';
+  $('cfgMsg').className = ok ? 'ok' : 'err';
+  $('cfgMsg').textContent = ok ? 'Configurações salvas.' : 'Não foi possível salvar.';
   refresh();
 };
-$('pause').onclick = async () => { await post('/api/config', { paused: !paused }); refresh(); };
+$('testTg').onclick = async () => {
+  const { ok, data } = await send('/api/telegram/test');
+  $('cfgMsg').className = ok ? 'ok' : 'err';
+  $('cfgMsg').textContent = ok ? `Bot encontrado: @${data.username}` : data.error;
+};
+$('pause').onclick = async () => { await send('/api/config', { paused: !paused }); refresh(); };
 
 refresh();
 setInterval(refresh, 5000);
