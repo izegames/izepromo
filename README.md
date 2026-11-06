@@ -3,7 +3,7 @@
 Bot próprio para enviar promoções (Amazon, Mercado Livre, Shopee, AliExpress) em **grupos de WhatsApp** e **canais do Telegram**, rodando no seu computador.
 
 ## Requisitos
-- Node.js 20 ou superior (https://nodejs.org)
+- Node.js 22.13 ou superior; baixe a versão LTS em https://nodejs.org
 - Um **chip/número secundário** com WhatsApp (recomendado, para não arriscar seu número principal)
 - Opcional, para o Telegram: um bot criado no [@BotFather](https://t.me/BotFather)
 
@@ -46,7 +46,7 @@ No formulário de nova oferta, o campo **Agendar para** define data e hora (no h
 - Informe nos posts que há links de afiliado, conforme as regras dos programas e a legislação de publicidade.
 
 ## Dados
-Tudo fica em `data/izepromo.db` (SQLite): configurações, destinos, fila, falhas e histórico. Se você usava a versão anterior, o `data/db.json` é **importado automaticamente** na primeira execução e renomeado para `db.json.migrado`.
+Tudo fica em `data/izepromo.db` (SQLite embutido no Node, sem compilar nada): configurações, destinos, fila, falhas e histórico. Se você usava a versão anterior, o `data/db.json` é **importado automaticamente** na primeira execução e renomeado para `db.json.migrado`.
 
 ## Testes
 ```
@@ -56,6 +56,7 @@ npm test
 ## Estrutura
 ```
 src/index.js             inicia tudo
+src/check-node.js         confere a versão do Node ao iniciar
 src/db.js                banco SQLite e migração do db.json antigo
 src/queue.js             fila, agendamento, tentativas e intervalo
 src/format.js            lojas, tag Amazon, preços, chave anti-repetição e textos
