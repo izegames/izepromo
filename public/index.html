@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de Promoções</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e6ec; --accent:#1f9d55; --danger:#d64545; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171d; --card:#1d222b; --text:#e8ebf1; --muted:#98a0b3; --line:#2c3340; --accent:#34c577; --danger:#ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  h1 { font-size:18px; margin:0; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  .status { font-size:13px; padding:4px 10px; border-radius:20px; background:var(--line); }
+  .status.on { background:var(--accent); color:#fff; }
+  main { max-width:1100px; margin:20px auto; padding:0 16px; display:grid; gap:16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width:800px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .full { grid-column:1 / -1; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { padding:9px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  button.danger { background:transparent; color:var(--danger); border:1px solid var(--line); padding:4px 10px; font-size:13px; }
+  .actions { display:flex; gap:8px; margin-top:14px; }
+  pre { white-space:pre-wrap; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; font:13px/1.4 ui-monospace, monospace; margin:8px 0; }
+  .item { border-top:1px solid var(--line); padding:10px 0; }
+  .item:first-child { border-top:0; }
+  .item-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .muted { color:var(--muted); font-size:13px; }
+  .err { color:var(--danger); font-size:13px; margin-top:8px; min-height:18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📣 Painel de Promoções</h1>
+  <span id="status" class="status">Conectando…</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Nova oferta</h2>
+    <label>Link (já com seu código de afiliado; na Amazon a tag é aplicada sozinha)</label>
+    <input id="url" placeholder="https://…">
+    <label>Título do produto</label>
+    <input id="title">
+    <div class="row">
+      <div><label>Preço atual (R$)</label><input id="price" inputmode="decimal"></div>
+      <div><label>Preço antigo (R$)</label><input id="oldPrice" inputmode="decimal"></div>
+    </div>
+    <div class="row">
+      <div><label>Cupom (opcional)</label><input id="coupon"></div>
+      <div><label>Observação (opcional)</label><input id="note" placeholder="Ex.: frete grátis"></div>
+    </div>
+    <label>URL da imagem (opcional)</label>
+    <input id="imageUrl" placeholder="https://…jpg">
+    <div class="actions">
+      <button id="add">Adicionar à fila</button>
+      <button id="addForce" class="ghost" title="Ignora a checagem de repetição">Adicionar mesmo se repetido</button>
+    </div>
+    <div id="err" class="err"></div>
+  </section>
+
+  <section class="card">
+    <h2>Configurações</h2>
+    <label>Grupo do WhatsApp</label>
+    <div style="display:flex; gap:8px">
+      <select id="group"><option value="">— carregue os grupos —</option></select>
+      <button id="loadGroups" class="ghost" type="button">Carregar</button>
+    </div>
+    <label>Tag de associado da Amazon</label>
+    <input id="amazonTag" placeholder="seuid-20">
+    <div class="row">
+      <div><label>Intervalo mínimo (min)</label><input id="minMinutes" type="number" min="1"></div>
+      <div><label>Intervalo máximo (min)</label><input id="maxMinutes" type="number" min="1"></div>
+    </div>
+    <label>Não repetir produto por (horas)</label>
+    <input id="dedupeHours" type="number" min="0">
+    <div class="actions">
+      <button id="saveCfg">Salvar</button>
+      <button id="pause" class="ghost"></button>
+    </div>
+    <p id="next" class="muted"></p>
+  </section>
+
+  <section class="card full">
+    <h2>Fila de envio (<span id="qcount">0</span>)</h2>
+    <div id="queue"></div>
+  </section>
+
+  <section class="card full">
+    <h2>Últimos enviados</h2>
+    <div id="sent" class="muted"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (url, opts) => fetch(url, opts).then(async (r) => ({ ok: r.ok, data: await r.json() }));
+const post = (url, body, method = 'POST') =>
+  api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+let cfgFilled = false;
+let paused = false;
+
+async function refresh() {
+  const { data: s } = await api('/api/state');
+  $('status').textContent = s.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado (veja o QR no terminal)';
+  $('status').className = 'status' + (s.connected ? ' on' : '');
+  paused = s.config.paused;
+  $('pause').textContent = paused ? '▶ Retomar envios' : '⏸ Pausar envios';
+
+  if (!cfgFilled) {
+    $('amazonTag').value = s.config.amazonTag;
+    $('minMinutes').value = s.config.minMinutes;
+    $('maxMinutes').value = s.config.maxMinutes;
+    $('dedupeHours').value = s.config.dedupeHours;
+    if (s.config.groupId) {
+      $('group').innerHTML = `<option value="${esc(s.config.groupId)}">${esc(s.config.groupId)}</option>`;
+    }
+    cfgFilled = true;
+  }
+
+  $('qcount').textContent = s.queue.length;
+  $('queue').innerHTML = s.queue.length
+    ? s.queue.map((q, i) => `
+      <div class="item">
+        <div class="item-head">
+          <strong>${i + 1}. ${esc(q.title)}</strong>
+          <button class="danger" onclick="removeItem('${q.id}')">Remover</button>
+        </div>
+        <pre>${esc(q.preview)}</pre>
+      </div>`).join('')
+    : '<p class="muted">Fila vazia.</p>';
+
+  $('sent').innerHTML = s.sent.length
+    ? s.sent.map((x) => `${new Date(x.at).toLocaleString('pt-BR')} — ${esc(x.title)}`).join('<br>')
+    : 'Nada enviado ainda.';
+
+  const wait = s.nextSendAt - Date.now();
+  $('next').textContent = s.queue.length && wait > 0
+    ? `Próximo envio em ~${Math.ceil(wait / 60000)} min.` : '';
+}
+
+async function add(force) {
+  $('err').textContent = '';
+  const body = {
+    url: $('url').value, title: $('title').value, price: $('price').value, oldPrice: $('oldPrice').value,
+    coupon: $('coupon').value, note: $('note').value, imageUrl: $('imageUrl').value, force,
+  };
+  const { ok, data } = await post('/api/queue', body);
+  if (!ok) { $('err').textContent = data.error; return; }
+  ['url', 'title', 'price', 'oldPrice', 'coupon', 'note', 'imageUrl'].forEach((id) => ($(id).value = ''));
+  refresh();
+}
+
+async function removeItem(id) {
+  await post('/api/queue/' + id, {}, 'DELETE');
+  refresh();
+}
+
+$('add').onclick = () => add(false);
+$('addForce').onclick = () => add(true);
+$('loadGroups').onclick = async () => {
+  const { data } = await api('/api/groups');
+  const cur = $('group').value;
+  $('group').innerHTML = data.length
+    ? data.map((g) => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('')
+    : '<option value="">Nenhum grupo (WhatsApp conectado?)</option>';
+  if (cur) $('group').value = cur;
+};
+$('saveCfg').onclick = async () => {
+  await post('/api/config', {
+    groupId: $('group').value, amazonTag: $('amazonTag').value, minMinutes: $('minMinutes').value,
+    maxMinutes: $('maxMinutes').value, dedupeHours: $('dedupeHours').value,
+  });
+  refresh();
+};
+$('pause').onclick = async () => { await post('/api/config', { paused: !paused }); refresh(); };
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
